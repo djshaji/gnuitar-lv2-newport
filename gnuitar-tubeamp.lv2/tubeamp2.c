@@ -215,27 +215,16 @@ instantiate(const LV2_Descriptor*     descriptor,
 
     params = gnuitar_memalign(1, sizeof(struct tubeamp_params));
 
-    params->stages = (float *) malloc (sizeof (float ));
-    params->gain = (float *) malloc (sizeof (float));
-    params->biasfactor = (float *) malloc (sizeof (float));
-    params->asymmetry = (float *) malloc (sizeof (float));
-    params->impulse_model = (float *) malloc (sizeof (float ));
-    params->impulse_quality = (float *) malloc (sizeof (float ));
+    params->stages = 4;
+    params->gain = 35.0; /* dB */
+    params->biasfactor = -7;
+    params->asymmetry = -3500;
+    params->impulse_model = 0;
+    params->impulse_quality = 1;
 
-    params->tone_bass = (float *) malloc (sizeof (float));
-    params->tone_middle = (float *) malloc (sizeof (float));
-    params->tone_treble = (float *) malloc (sizeof (float));
-
-    * params->stages = 4;
-    * params->gain = 35.0; /* dB */
-    * params->biasfactor = -7.0;
-    * params->asymmetry = -3500.0;
-    * params->impulse_model = 0;
-    * params->impulse_quality = 1;
-
-    * params->tone_bass = +3; /* dB */
-    * params->tone_middle = -10; /* dB */
-    * params->tone_treble = 0 ;
+    params->tone_bass = +3; /* dB */
+    params->tone_middle = -10; /* dB */
+    params->tone_treble = 0 ;
 
     /* configure the various stages */
     params->r_i[0] = 68e3 / 3000;
@@ -308,10 +297,18 @@ connect_port(LV2_Handle instance,
              uint32_t   port,
              void*      data)
 {
+	if (port > 1)
+		LOGD ("connect port: %d: %f\n", port, (float *) data);
+	if (data == null)
+		return ;
+
 	TubeAmp * tubeamp = (TubeAmp *) instance ;
+	float * d = (float *) data ;
+	float f = * d ;
+	int i = (int ) f ;
 	switch ((PortIndex)port) {
 		case STAGES:
-			tubeamp->stages = (float *) data ;
+			tubeamp->stages = i;
 			break ;
 		case INPUT:
 			tubeamp -> input = (float *) data ;
@@ -320,28 +317,29 @@ connect_port(LV2_Handle instance,
 			tubeamp -> output = (float *) data ;
 			break ;
 		case IMPULSE_QUALITY:
-			tubeamp->impulse_quality = (float *) data ;
+			tubeamp->impulse_quality = i ;
 			break ;
 		case IMPULSE_MODEL:
-			tubeamp->impulse_model = (float *) data ;
+			tubeamp->impulse_model = i ;
 			break;
 		case TONE_BASS:
-			tubeamp->tone_bass = (float *) data ;
+			tubeamp->tone_bass = * (float *) data ;
 			break;
 		case TONE_MIDDLE:
-			tubeamp->tone_middle =  (float *) data ;
+			tubeamp->tone_middle = * (float *) data ;
 			break;
 		case TONE_TREBLE:
-			tubeamp->tone_treble = (float *) data ;
+			tubeamp->tone_treble = * (float *) data ;
 			break;
 		case GAIN:
-			tubeamp->gain = (float *) data ;
+			tubeamp->gain = * (float *) data ;
+			LOGD ("gain: %f\n", tubeamp->gain);
 			break ;
 		case ASYMMETRY:
-			tubeamp->asymmetry = (float *) data ;
+			tubeamp->asymmetry = * (float *) data ;
 			break ;
 		case BIAS_FACTOR:
-			tubeamp->biasfactor = (float *) data ;
+			tubeamp->biasfactor = * (float *) data ;
 			break ;
 	}
 }
@@ -388,25 +386,20 @@ run(LV2_Handle instance, uint32_t n_samples)
     DSP_SAMPLE *ptr1;
 
 	float gain;
-	int stages = * params->stages;
-	int impulse_model = * params->impulse_model ;
-	int impulse_quality = * params->impulse_quality ;
-	int asymmetry = * params->asymmetry ;
-	int biasfactor = * params->biasfactor;
-	//~ printf ("val %f\n", *params->tone_treble);
 
+	    printf ("asym %f bias %f\n", params->asymmetry, params->biasfactor);
     /* update bq states from tone controls */
-    set_lsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 500, *params->tone_bass, &params->bq_bass);
-    set_peq_biquad(params->sample_rate * UPSAMPLE_RATIO, 650, 500.0, * params->tone_middle, &params->bq_middle);
-    set_hsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 800, * params->tone_treble, &params->bq_treble);
+    set_lsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 500, params->tone_bass, &params->bq_bass);
+    set_peq_biquad(params->sample_rate * UPSAMPLE_RATIO, 650, 500.0, params->tone_middle, &params->bq_middle);
+    set_hsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 800, params->tone_treble, &params->bq_treble);
 
 	/* Note to Shaji
 	 * this is how we calculate gain in dB
 	 * I *think*
 	 */
 	
-    gain = pow(10.f, * params->gain / 20.f);
-
+    gain = pow(10.f, params->gain / 20.f);
+    //~ LOGD ("%f: %f\n", params->gain, gain);
     params->in[curr_channel] = params->input [0];
     
     /* highpass -> low shelf eq -> lowpass -> waveshaper */
@@ -418,7 +411,7 @@ run(LV2_Handle instance, uint32_t n_samples)
             /* IIR interpolation */
             params->in[curr_channel] = (params->output[i] + params->in[curr_channel] * (float) (UPSAMPLE_RATIO-1)) / (float) UPSAMPLE_RATIO;
             result = params->in[curr_channel] ;// (float) MAX_SAMPLE;
-            for (j = 0; j < stages/* * params->stages*/; j += 1) {
+            for (j = 0; j < params->stages; j += 1) {
                 /* gain of the block */
                 result *= gain;
                 /* low-pass filter that mimicks input capacitance */
@@ -426,7 +419,7 @@ run(LV2_Handle instance, uint32_t n_samples)
                 /* add feedback bias current for "punch" simulation for waveshaper */
                 result = F_tube(params->bias[j] - result, params->r_i[j]);
                 /* feedback bias */
-                params->bias[j] = do_biquad((asymmetry - biasfactor * result) * params->r_k_p[j], &params->biaslowpass[j], curr_channel);
+                params->bias[j] = do_biquad((-3500 - -7 * result) * params->r_k_p[j], &params->biaslowpass[j], curr_channel);
                 /* high pass filter to remove bias from the current stage */
                 result = do_biquad(result, &params->highpass[j], curr_channel);
                 
@@ -444,7 +437,7 @@ run(LV2_Handle instance, uint32_t n_samples)
         
         /* convolve the output. We put two buffers side-by-side to avoid & in loop. */
         ptr1[IMPULSE_SIZE] = ptr1[0] = result / 500.f * (float) (MAX_SAMPLE >> 13);
-        params->output[i] = convolve(ampmodels[impulse_model].impulse, ptr1, ampqualities[impulse_quality].quality) / 32.f;
+        params->output[i] = convolve(ampmodels[params->impulse_model].impulse, ptr1, ampqualities[params->impulse_quality].quality) / 32.f;
         
         params->bufidx[curr_channel] -= 1;
         if (params->bufidx[curr_channel] < 0)
