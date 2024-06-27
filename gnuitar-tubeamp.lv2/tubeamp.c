@@ -52,7 +52,7 @@ typedef float DSP_SAMPLE ;
 
 #define UPSAMPLE_RATIO 6
 #define IMPULSE_SIZE   512
-#define MAX_SAMPLE (32767 << 8)
+#define MAX_SAMPLE 1//(32767 << 8)
 
 typedef enum {
 	INPUT,
@@ -376,7 +376,21 @@ F_tube(float in, float r_i)
 
 static void
 activate(LV2_Handle instance) {
+    TubeAmp * params = (TubeAmp *) instance ;
+    * params->stages = 4;
+    * params->gain = 35.0; /* dB */
+    * params->biasfactor = -7.0;
+    * params->asymmetry = -3500.0;
+    * params->impulse_model = 0;
+    * params->impulse_quality = 1;
+
+    * params->tone_bass = +3; /* dB */
+    * params->tone_middle = -10; /* dB */
+    * params->tone_treble = 10 ;
 	
+    set_lsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 500, *params->tone_bass, &params->bq_bass);
+    set_peq_biquad(params->sample_rate * UPSAMPLE_RATIO, 650, 500.0, * params->tone_middle, &params->bq_middle);
+    set_hsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 800, * params->tone_treble, &params->bq_treble);
 }
 
 
@@ -396,9 +410,9 @@ run(LV2_Handle instance, uint32_t n_samples)
 	//~ printf ("val %f\n", *params->tone_treble);
 
     /* update bq states from tone controls */
-    set_lsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 500, *params->tone_bass, &params->bq_bass);
-    set_peq_biquad(params->sample_rate * UPSAMPLE_RATIO, 650, 500.0, * params->tone_middle, &params->bq_middle);
-    set_hsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 800, * params->tone_treble, &params->bq_treble);
+    //~ set_lsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 500, *params->tone_bass, &params->bq_bass);
+    //~ set_peq_biquad(params->sample_rate * UPSAMPLE_RATIO, 650, 500.0, * params->tone_middle, &params->bq_middle);
+    //~ set_hsh_biquad(params->sample_rate * UPSAMPLE_RATIO, 800, * params->tone_treble, &params->bq_treble);
 
 	/* Note to Shaji
 	 * this is how we calculate gain in dB
@@ -443,8 +457,8 @@ run(LV2_Handle instance, uint32_t n_samples)
         ptr1 = params->buf[curr_channel] + params->bufidx[curr_channel];
         
         /* convolve the output. We put two buffers side-by-side to avoid & in loop. */
-        ptr1[IMPULSE_SIZE] = ptr1[0] = result / 500.f * (float) (MAX_SAMPLE >> 13);
-        params->output[i] = convolve(ampmodels[impulse_model].impulse, ptr1, ampqualities[impulse_quality].quality) / 32.f;
+        ptr1[IMPULSE_SIZE] = ptr1[0] = result ;// 500.f * (float) (MAX_SAMPLE >> 13);
+        params->output[i] = convolve(ampmodels[impulse_model].impulse, ptr1, ampqualities[impulse_quality].quality) ;// 32.f;
         
         params->bufidx[curr_channel] -= 1;
         if (params->bufidx[curr_channel] < 0)

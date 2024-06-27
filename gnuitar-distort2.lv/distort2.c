@@ -128,10 +128,10 @@ run(LV2_Handle instance, uint32_t n_samples)
     count = n_samples;
     
     
-    for (int i = 0 ; i < n_samples ; i ++)
-        params -> output [i] = params->input [i];
+    //~ for (int i = 0 ; i < n_samples ; i ++)
+        //~ params -> output [i] = params->input [i];
 
-    s = params->output ;
+    s = params->input ;
     
     int ax = 0 ;
     /* no input, no output :-) to avoid extra calc. Optimized for noise gate,
